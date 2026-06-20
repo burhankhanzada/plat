@@ -243,20 +243,12 @@ final class PlatTabBar extends StatelessWidget {
                 return IgnorePointer(
                   child: placeholder == null
                       ? chip
-                      : Stack(
-                          fit: .passthrough,
-                          children: [
-                            Opacity(opacity: 0, child: chip),
-                            Positioned.fill(
-                              child: platTabScope(
-                                details: details,
-                                child: Builder(
-                                  builder: (context) =>
-                                      placeholder(context, details),
-                                ),
-                              ),
-                            ),
-                          ],
+                      : platTabScope(
+                          details: details,
+                          child: Builder(
+                            builder: (context) =>
+                                placeholder(context, details),
+                          ),
                         ),
                 );
               },

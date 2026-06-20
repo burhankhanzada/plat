@@ -68,6 +68,9 @@ final class PlatTabBar extends StatelessWidget {
   /// Widget inserted after the last tab inside the strip.
   final Widget? stripTrailing;
 
+  /// Renders a separator between tabs. Overrides [PlatTabBarTheme.spacing].
+  final IndexedWidgetBuilder? separatorBuilder;
+
   /// Renders a single tab for this bar. When null, the bar falls back to
   /// [PlatTabChip].
   final PlatTabBuilder? tabBuilder;
@@ -160,6 +163,7 @@ final class PlatTabBar extends StatelessWidget {
     this.trailing,
     this.stripLeading,
     this.stripTrailing,
+    this.separatorBuilder,
     this.tabBuilder,
     this.placeholderBuilder,
     this.dragFeedbackBuilder,
@@ -224,6 +228,7 @@ final class PlatTabBar extends StatelessWidget {
               hover: binding.hover,
               stripLeading: stripLeading,
               stripTrailing: stripTrailing,
+              separatorBuilder: separatorBuilder,
               buildPlaceholder: (context, tab) {
                 final details = _placeholderDetails(
                   tabs: binding.tabs,

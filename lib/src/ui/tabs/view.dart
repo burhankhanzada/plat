@@ -131,6 +131,7 @@ final class PlatTabStrip extends StatefulWidget {
   final ({int at, TabDragPayload payload})? hover;
   final Widget? stripLeading;
   final Widget? stripTrailing;
+  final IndexedWidgetBuilder? separatorBuilder;
   final Widget Function(BuildContext context, TabSnapshot tab) buildPlaceholder;
 
   const PlatTabStrip({
@@ -142,6 +143,7 @@ final class PlatTabStrip extends StatefulWidget {
     required this.buildPlaceholder,
     this.stripLeading,
     this.stripTrailing,
+    this.separatorBuilder,
   });
 
   @override
@@ -193,6 +195,7 @@ class _PlatTabStripState extends State<PlatTabStrip> {
       buildPlaceholder: widget.buildPlaceholder,
       leading: widget.stripLeading,
       trailing: widget.stripTrailing,
+      separatorBuilder: widget.separatorBuilder,
     );
 
     return LayoutBuilder(
@@ -291,6 +294,7 @@ class _PlatTabStripState extends State<PlatTabStrip> {
         hover: widget.hover,
         spacing: widget.theme.spacing,
         buildPlaceholder: widget.buildPlaceholder,
+        separatorBuilder: widget.separatorBuilder,
         wrapChip: (tab, child) => SizedBox(
           width: switch ((tab.pinned && pinnedWidth != null, tab.selected)) {
             (true, _) => pinnedWidth,
@@ -670,6 +674,7 @@ List<Widget> _stripChildren({
   buildPlaceholder,
   Widget? leading,
   Widget? trailing,
+  IndexedWidgetBuilder? separatorBuilder,
   Widget Function(TabSnapshot tab, Widget child)? wrapChip,
 }) {
   final hoverTab = hover?.payload.tab;
@@ -692,13 +697,18 @@ List<Widget> _stripChildren({
   final isVertical = view.side.isVertical;
   final result = <Widget>[?leading];
   for (var i = 0; i < slots.length; i++) {
-    if (i > 0 && spacing > 0) {
-      result.add(
-        SizedBox(
-          width: isVertical ? null : spacing,
-          height: isVertical ? spacing : null,
-        ),
-      );
+    if (i > 0) {
+      final isNextToPlaceholder = hoverAt != null && (i == hoverAt || i - 1 == hoverAt);
+      if (separatorBuilder != null && !isNextToPlaceholder) {
+        result.add(separatorBuilder(context, i - 1));
+      } else if (spacing > 0) {
+        result.add(
+          SizedBox(
+            width: isVertical ? null : spacing,
+            height: isVertical ? spacing : null,
+          ),
+        );
+      }
     }
     result.add(slots[i]);
   }

@@ -16,10 +16,17 @@ final class PlatDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     final dividerTheme = PlatTheme.of(context).divider;
     final decoration = dividerTheme.decoration?.resolve(states);
-    if (decoration != null) return DecoratedBox(decoration: decoration);
-
-    final resolvedColor = dividerTheme.color?.resolve(states);
-    return ColoredBox(color: resolvedColor ?? _defaultColor(context, states));
+    Widget child;
+    if (decoration != null) {
+      child = DecoratedBox(decoration: decoration);
+    } else {
+      final resolvedColor = dividerTheme.color?.resolve(states);
+      child = ColoredBox(color: resolvedColor ?? _defaultColor(context, states));
+    }
+    if (dividerTheme.margin != null) {
+      child = Padding(padding: dividerTheme.margin!, child: child);
+    }
+    return child;
   }
 
   static Color _defaultColor(BuildContext context, Set<WidgetState> states) {

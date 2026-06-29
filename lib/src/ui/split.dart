@@ -41,12 +41,18 @@ class _SplitRenderState extends State<SplitRender> {
     if (visible.isEmpty) return const SizedBox.shrink();
 
     final dividerTheme = PlatTheme.of(context).divider;
+    final margin = dividerTheme.margin;
+    final isHorizontal = view.axis == .horizontal;
+    final spacing = dividerTheme.thickness +
+        (margin != null
+            ? (isHorizontal ? margin.horizontal : margin.vertical)
+            : 0.0);
     return PlatSplit(
       interaction: _interaction,
       cursor: dividerTheme.cursor,
       resizable: view.resizable,
       hitSlop: dividerTheme.hitSlop,
-      spacing: dividerTheme.thickness,
+      spacing: spacing,
       axis: view.axis == .horizontal ? .horizontal : .vertical,
       onCommit: (sizes) => widget.controller.resizeSplit(
         view.id,

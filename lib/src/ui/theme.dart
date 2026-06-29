@@ -74,17 +74,21 @@ final class PlatDividerTheme {
   /// `SystemMouseCursors.resizeRow` for vertical splits at render time.
   final MouseCursor? cursor;
 
+  /// Margin around the divider line.
+  final EdgeInsetsGeometry? margin;
+
   const PlatDividerTheme({
     this.thickness = 1,
     this.hitSlop = 4,
     this.decoration,
     this.color,
     this.cursor,
+    this.margin,
   });
 
   @override
   int get hashCode =>
-      Object.hash(thickness, hitSlop, decoration, color, cursor);
+      Object.hash(thickness, hitSlop, decoration, color, cursor, margin);
 
   @override
   bool operator ==(Object other) =>
@@ -94,7 +98,8 @@ final class PlatDividerTheme {
           other.hitSlop == hitSlop &&
           other.decoration == decoration &&
           other.color == color &&
-          other.cursor == cursor;
+          other.cursor == cursor &&
+          other.margin == margin;
 
   PlatDividerTheme copyWith({
     double? thickness,
@@ -102,12 +107,14 @@ final class PlatDividerTheme {
     WidgetStateProperty<Decoration?>? decoration,
     WidgetStateProperty<Color?>? color,
     MouseCursor? cursor,
+    EdgeInsetsGeometry? margin,
   }) => PlatDividerTheme(
     thickness: thickness ?? this.thickness,
     hitSlop: hitSlop ?? this.hitSlop,
     decoration: decoration ?? this.decoration,
     color: color ?? this.color,
     cursor: cursor ?? this.cursor,
+    margin: margin ?? this.margin,
   );
 
   static PlatDividerTheme lerp(
@@ -123,6 +130,7 @@ final class PlatDividerTheme {
       decoration: _lerpDecorationStateProperty(a.decoration, b.decoration, t),
       color: _lerpColorStateProperty(a.color, b.color, t),
       cursor: pickB ? b.cursor : a.cursor,
+      margin: EdgeInsetsGeometry.lerp(a.margin, b.margin, t),
     );
   }
 }

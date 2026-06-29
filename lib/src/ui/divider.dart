@@ -21,7 +21,17 @@ final class PlatDivider extends StatelessWidget {
       child = DecoratedBox(decoration: decoration);
     } else {
       final resolvedColor = dividerTheme.color?.resolve(states);
-      child = ColoredBox(color: resolvedColor ?? _defaultColor(context, states));
+      final color = resolvedColor ?? _defaultColor(context, states);
+      if (dividerTheme.borderRadius != null) {
+        child = DecoratedBox(
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: dividerTheme.borderRadius,
+          ),
+        );
+      } else {
+        child = ColoredBox(color: color);
+      }
     }
     if (dividerTheme.margin != null) {
       child = Padding(padding: dividerTheme.margin!, child: child);

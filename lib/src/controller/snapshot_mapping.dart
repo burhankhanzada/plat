@@ -29,6 +29,9 @@ extension PlatSnapshotMapping on PlatSnapshot {
       child: slot.child?.toPane(),
       persistent: slot.persistent,
       boundsMaximize: slot.boundsMaximize,
+      collapsible: slot.collapsible,
+      collapseThreshold: slot.collapseThreshold,
+      collapsed: slot.collapsed,
     ),
     final LeafSnapshot leaf => PlatLeaf(
       id: leaf.id,

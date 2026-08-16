@@ -43,7 +43,8 @@ builders, and themeable chrome.
 - **Tab workflows**: Reorder, drag, pin, lock, preview, close, and move tabs.
 - **Drag-and-drop layouts**: Move tabs or panes within one view or across views.
 - **Resizable panes**: Combine fixed, fractional, auto, minimum, and maximum extents.
-- **Controller commands**: Focus, close, insert, split, hide, maximize, undo, and redo.
+- **Collapsible slots**: Drag a slot past its threshold to collapse it, and drag back to reopen.
+- **Controller commands**: Focus, close, insert, split, hide, collapse, maximize, undo, and redo.
 - **Stable snapshots**: Read layout state by id for rendering and commands.
 - **Drop policies**: Accept or reject drops by source controller, target, and zone.
 - **Composable styling**: Theme dividers, drop hints, tab bars, and tab chips.
@@ -79,7 +80,7 @@ A `Plat` tree describes the workspace shape:
 - `Plat.tabs`: group tabs and render the active tab's child.
 - `PlatTab`: tab metadata such as title, pinned, locked, and preview state.
 - `Plat.leaf`: a content endpoint rendered by your `leafBuilder`.
-- `Plat.slot`: a region for empty states, stable ids, and scoped maximize.
+- `Plat.slot`: a region for empty states, stable ids, scoped maximize, and collapse.
 - `id`: stable string identity for builders, focus, drops, and commands.
 - `PlatSize` / `PlatExtent`: fixed, fractional, auto, and resizable space.
 
@@ -142,6 +143,41 @@ controller.split(
 controller.close('readme');
 controller.undo();
 ```
+
+## Collapsible slots
+
+Mark a slot `collapsible` and its divider gains IDE-panel behavior: drag the
+slot below `collapseThreshold` and it collapses to zero extent, handing its
+space to its siblings. The divider stays put, so dragging back past the
+threshold reopens the slot at exactly the extent it had before.
+
+`collapseThreshold` defaults to `.auto()`, which resolves to half the slot's
+minimum extent (or 20 logical pixels when it declares none).
+
+```dart
+const .slot(
+  id: 'terminal',
+  collapsible: true,
+  size: .resizable(initial: .pixel(240), min: .pixel(120)),
+  child: .tabs([PlatTab.leaf(title: 'Terminal')], id: 'term'),
+)
+```
+
+Drive the same state from code, and read it back off the snapshot:
+
+```dart
+controller.setCollapsed('terminal', collapsed: true);
+
+final slot = controller.snapshot('terminal')! as SlotSnapshot;
+controller.setCollapsed('terminal', collapsed: !slot.collapsed);
+```
+
+Programmatic collapses animate; a drag commits instantly so the pane never
+lags behind the pointer. Tune the transition with `PlatCollapseTheme`.
+
+Collapse is distinct from `setHidden`: a hidden node leaves the layout
+entirely, taking its divider with it, while a collapsed slot keeps its
+divider as the handle that brings it back.
 
 ## Customization
 

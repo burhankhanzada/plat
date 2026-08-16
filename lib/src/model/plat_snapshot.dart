@@ -154,6 +154,18 @@ final class SlotSnapshot extends PlatSnapshot {
   /// by the slot rather than expanding to fill the whole tree.
   final bool boundsMaximize;
 
+  /// True when the neighbouring divider can collapse and reopen this
+  /// slot by drag.
+  final bool collapsible;
+
+  /// Extent at which a drag collapses this slot. [PlatExtent.auto]
+  /// resolves to half the slot's minimum extent, or 20 logical pixels.
+  final PlatExtent collapseThreshold;
+
+  /// True when the slot is laid out at zero main-axis extent, with its
+  /// divider still draggable so it can be reopened.
+  final bool collapsed;
+
   /// The wrapped snapshot, or `null` when the slot is empty.
   final PlatSnapshot? child;
 
@@ -165,6 +177,9 @@ final class SlotSnapshot extends PlatSnapshot {
     required this.child,
     required this.persistent,
     required this.boundsMaximize,
+    required this.collapsible,
+    required this.collapseThreshold,
+    required this.collapsed,
   });
 
   @override
@@ -175,6 +190,9 @@ final class SlotSnapshot extends PlatSnapshot {
     maximized,
     persistent,
     boundsMaximize,
+    collapsible,
+    collapseThreshold,
+    collapsed,
     child,
   );
 
@@ -188,6 +206,9 @@ final class SlotSnapshot extends PlatSnapshot {
           other.maximized == maximized &&
           other.persistent == persistent &&
           other.boundsMaximize == boundsMaximize &&
+          other.collapsible == collapsible &&
+          other.collapseThreshold == collapseThreshold &&
+          other.collapsed == collapsed &&
           other.child == child;
 }
 

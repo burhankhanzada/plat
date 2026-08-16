@@ -52,6 +52,7 @@ export 'src/ui/tabs/chip.dart'
     show PlatTabChip, PlatTabCloseButton, PlatTabDetails;
 export 'src/ui/theme.dart'
     show
+        PlatCollapseTheme,
         PlatDividerTheme,
         PlatDropHintTheme,
         PlatTabBarTheme,

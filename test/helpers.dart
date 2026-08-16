@@ -34,6 +34,9 @@ Plat asLayout(PlatNode node) => switch (node) {
     child: slot.child == null ? null : asLayout(slot.child!),
     persistent: slot.persistent,
     boundsMaximize: slot.boundsMaximize,
+    collapsible: slot.collapsible,
+    collapseThreshold: slot.collapseThreshold,
+    collapsed: slot.collapsed,
   ),
 };
 

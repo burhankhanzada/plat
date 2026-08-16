@@ -261,6 +261,16 @@ abstract base class PlatController extends ChangeNotifier {
   /// child. Returns whether the call changed controller state.
   bool resizeSplit(String splitId, List<PlatSize> sizes);
 
+  /// Sets whether the slot with the given id is collapsed.
+  ///
+  /// A collapsed slot is laid out at zero main-axis extent while its
+  /// divider stays draggable, so the same gesture that collapsed it
+  /// reopens it. The slot keeps its size, which is what it reopens at.
+  ///
+  /// No-op unless [slotId] names a slot that declares `collapsible`.
+  /// Returns whether the call changed controller state.
+  bool setCollapsed(String slotId, {required bool collapsed});
+
   /// Sets whether the node with the given id is hidden.
   ///
   /// Hidden nodes keep their slot in the tree. Returns whether the

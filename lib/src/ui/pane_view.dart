@@ -20,6 +20,9 @@ bool _slotPassThroughChanged(SlotSnapshot a, SlotSnapshot b) {
       a.maximized != b.maximized ||
       a.persistent != b.persistent ||
       a.boundsMaximize != b.boundsMaximize ||
+      a.collapsible != b.collapsible ||
+      a.collapseThreshold != b.collapseThreshold ||
+      a.collapsed != b.collapsed ||
       a.child?.id != b.child?.id;
 }
 
@@ -41,6 +44,16 @@ bool _splitLayoutChanged(SplitSnapshot a, SplitSnapshot b) {
         left.size != right.size ||
         left.hidden != right.hidden) {
       return true;
+    }
+    // A child's collapse config and state drive the split's own layout,
+    // so the split must rebuild when either moves.
+    if (left case final SlotSnapshot a) {
+      if (right is! SlotSnapshot ||
+          a.collapsible != right.collapsible ||
+          a.collapseThreshold != right.collapseThreshold ||
+          a.collapsed != right.collapsed) {
+        return true;
+      }
     }
   }
   return false;

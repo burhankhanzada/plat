@@ -23,8 +23,11 @@ final Plat themeLayout = .row(
             .leaf(id: 'settings', title: 'Settings'),
           ], id: 'main-tabs'),
         ),
+        // Drag this slot's divider down past half its 120 px minimum and
+        // it collapses; drag back up to reopen it at the same extent.
         .slot(
           id: 'bottom-slot',
+          collapsible: true,
           size: const .resizable(initial: .fraction(0.28), min: .pixel(120)),
           child: .tabs([
             .leaf(id: 'terminal', title: 'Terminal'),

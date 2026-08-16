@@ -139,6 +139,9 @@ PlatNode _lower(Plat node) => switch (node) {
     size: slot.size,
     persistent: slot.persistent,
     boundsMaximize: slot.boundsMaximize,
+    collapsible: slot.collapsible,
+    collapseThreshold: slot.collapseThreshold,
+    collapsed: slot.collapsible && slot.collapsed,
     child: slot.child == null ? null : _lower(slot.child!),
   ),
 };
@@ -182,6 +185,9 @@ LowerResult _tryLowerRootSlot(PlatSlot slot) {
       size: slot.size,
       persistent: slot.persistent,
       boundsMaximize: slot.boundsMaximize,
+      collapsible: slot.collapsible,
+      collapseThreshold: slot.collapseThreshold,
+      collapsed: slot.collapsible && slot.collapsed,
       child: lowered,
     ),
   );
@@ -254,6 +260,9 @@ SlotNode? _tryLowerSlot(PlatSlot slot) {
     size: slot.size,
     persistent: slot.persistent,
     boundsMaximize: slot.boundsMaximize,
+    collapsible: slot.collapsible,
+    collapseThreshold: slot.collapseThreshold,
+    collapsed: slot.collapsible && slot.collapsed,
     child: lowered,
   );
 }

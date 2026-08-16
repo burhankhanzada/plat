@@ -382,6 +382,21 @@ sealed class PlatNode {
   /// Clears any current maximize in this subtree.
   PlatNode restore() => _writeMaximized(null, seenTarget: false).node;
 
+  /// Sets whether the [SlotNode] identified by [id] is collapsed.
+  ///
+  /// Returns `this` unchanged when [id] is absent, is not a slot, or is
+  /// a slot that does not declare `collapsible`.
+  PlatNode setCollapsed(String id, {required bool collapsed}) {
+    final result = _editNode(id, (node) {
+      if (node case final SlotNode slot) {
+        if (!slot.collapsible || slot.collapsed == collapsed) return node;
+        return slot.copyWith(collapsed: collapsed);
+      }
+      return node;
+    });
+    return result.changed ? result.node! : this;
+  }
+
   /// Sets whether the pane identified by [id] is hidden.
   PlatNode setHidden(String id, {required bool hidden}) {
     final result = _editNode(id, (node) {

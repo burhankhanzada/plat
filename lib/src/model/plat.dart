@@ -102,6 +102,9 @@ sealed class Plat {
     Plat? child,
     bool persistent,
     bool boundsMaximize,
+    bool collapsible,
+    PlatExtent collapseThreshold,
+    bool collapsed,
   }) = PlatSlot;
 
   /// A tab group over [tabs]. Redirects to [PlatTabGroup.new].
@@ -203,9 +206,24 @@ final class PlatLeaf extends Plat {
 /// A structural wrapper around a single, optional [child].
 ///
 /// Slots anchor stable ids in regions that may be empty, keep maximize inside
-/// a subtree ([boundsMaximize]), and let chrome paint around the child. A bare
-/// slot with no flags is decorative and disappears with its child; a
-/// [persistent] slot stays in the tree as an empty stub.
+/// a subtree ([boundsMaximize]), collapse to zero extent ([collapsible]), and
+/// let chrome paint around the child. A bare slot with no flags is decorative
+/// and disappears with its child; a [persistent] slot stays in the tree as an
+/// empty stub.
+///
+/// A [collapsible] slot behaves like an IDE panel: dragging the neighbouring
+/// divider past [collapseThreshold] collapses it to zero extent, and the
+/// divider stays draggable so the same gesture reversed reopens it. The slot's
+/// [size] is what it reopens at, so the collapse round-trips exactly.
+///
+/// ```dart
+/// const .slot(
+///   id: 'terminal',
+///   collapsible: true,
+///   size: .resizable(initial: .pixel(240), min: .pixel(120)),
+///   child: .tabs([PlatTab.leaf(title: 'Terminal')], id: 'term'),
+/// )
+/// ```
 final class PlatSlot extends Plat {
   /// The wrapped pane, or `null` for an empty slot.
   final Plat? child;
@@ -218,12 +236,37 @@ final class PlatSlot extends Plat {
   /// fill the slot's bounds rather than the whole tree.
   final bool boundsMaximize;
 
+  /// When true, dragging the neighbouring divider past
+  /// [collapseThreshold] collapses this slot, and dragging back past it
+  /// reopens it. `PlatController.setCollapsed` drives the same state
+  /// programmatically.
+  ///
+  /// Only meaningful when the slot sits inside a resizable split and
+  /// carries a [PlatSize.resizable] size; a [PlatSize.fixed] slot locks
+  /// its divider and never collapses by drag.
+  final bool collapsible;
+
+  /// Extent at which a drag collapses this slot, and the reverse
+  /// distance at which a collapsed slot reopens.
+  ///
+  /// Defaults to [PlatExtent.auto], which resolves to half the slot's
+  /// minimum extent, or 20 logical pixels when [size] declares no
+  /// minimum. A [PlatExtent.fraction] is read as a fraction of the
+  /// parent split's main-axis extent.
+  final PlatExtent collapseThreshold;
+
+  /// When true, the slot starts collapsed. Ignored unless [collapsible].
+  final bool collapsed;
+
   const PlatSlot({
     super.id,
     super.size,
     this.child,
     this.persistent = false,
     this.boundsMaximize = false,
+    this.collapsible = false,
+    this.collapseThreshold = const .auto(),
+    this.collapsed = false,
   });
 }
 

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -5,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:meta/meta.dart' show internal;
 
 import '../core/foundation/foundation.dart';
+import 'collapse.dart';
 
 const _zeroSlop = DeviceGestureSettings(touchSlop: 0);
 const _leafDragHandleSize = Size(22, 4);
@@ -64,6 +66,9 @@ List<double> _computeSizes(List<PlatSize> platSizes, double available) {
   return claimed;
 }
 
+/// Default collapse threshold when a slot declares no minimum extent.
+const _fallbackCollapseThreshold = 20.0;
+
 typedef _Drag = ({
   Offset startGlobal,
   _Slot left,
@@ -73,7 +78,17 @@ typedef _Drag = ({
 
 typedef _PairUpdate = ({PlatSize leftSize, PlatSize rightSize});
 
-typedef _Slot = ({String id, PlatSize size, double pixels});
+/// A content child as of the last layout. [pixels] is the extent it was
+/// laid out at (zero while collapsed); [openPixels] is the extent it
+/// claims when open, which is what a reopen restores to.
+typedef _Slot = ({String id, PlatSize size, double pixels, double openPixels});
+
+/// Commit handler for a finished divider drag. [sizes] carries one entry
+/// per content child; [collapsed] carries only the slots whose collapsed
+/// state changed.
+@internal
+typedef SplitCommit =
+    void Function(List<PlatSize> sizes, Map<String, bool> collapsed);
 
 class _SplitParentData extends ContainerBoxParentData<RenderBox> {
   // `contentId == null` discriminates a divider from a content child.
@@ -146,8 +161,24 @@ class PlatSplit extends MultiChildRenderObjectWidget {
   final double hitSlop;
   final bool resizable;
   final DividerInteraction interaction;
-  final ValueChanged<List<PlatSize>> onCommit;
+  final SplitCommit onCommit;
   final MouseCursor? cursor;
+
+  /// Collapse threshold per collapsible content child, keyed by node id.
+  /// A child absent from this map cannot collapse by drag.
+  final Map<String, PlatExtent> collapsible;
+
+  /// Ids of the content children that are currently collapsed.
+  final Set<String> collapsed;
+
+  /// Ticker source for the collapse/reopen transition.
+  final TickerProvider vsync;
+
+  /// Duration of the collapse/reopen transition.
+  final Duration collapseDuration;
+
+  /// Curve of the collapse/reopen transition.
+  final Curve collapseCurve;
 
   const PlatSplit({
     super.key,
@@ -157,6 +188,11 @@ class PlatSplit extends MultiChildRenderObjectWidget {
     required this.resizable,
     required this.interaction,
     required this.onCommit,
+    required this.collapsible,
+    required this.collapsed,
+    required this.vsync,
+    required this.collapseDuration,
+    required this.collapseCurve,
     required super.children,
     this.cursor,
   });
@@ -169,6 +205,11 @@ class PlatSplit extends MultiChildRenderObjectWidget {
     resizable: resizable,
     interaction: interaction,
     onCommit: onCommit,
+    collapsible: collapsible,
+    collapsed: collapsed,
+    vsync: vsync,
+    collapseDuration: collapseDuration,
+    collapseCurve: collapseCurve,
     cursor: cursor,
   );
 
@@ -181,6 +222,11 @@ class PlatSplit extends MultiChildRenderObjectWidget {
       ..resizable = resizable
       ..interaction = interaction
       ..onCommit = onCommit
+      ..collapsible = collapsible
+      ..vsync = vsync
+      ..collapseDuration = collapseDuration
+      ..collapseCurve = collapseCurve
+      ..collapsed = collapsed
       ..cursor = cursor;
   }
 }
@@ -202,6 +248,11 @@ class RenderPlatSplit extends RenderBox
     required this.resizable,
     required this.interaction,
     required this.onCommit,
+    required this.collapsible,
+    required this._collapsed,
+    required this._vsync,
+    required this._collapseDuration,
+    required this._collapseCurve,
     this._cursor,
   });
 
@@ -210,7 +261,8 @@ class RenderPlatSplit extends RenderBox
   double hitSlop;
   bool resizable;
   DividerInteraction interaction;
-  ValueChanged<List<PlatSize>> onCommit;
+  SplitCommit onCommit;
+  Map<String, PlatExtent> collapsible;
   MouseCursor? _cursor;
 
   set cursor(MouseCursor? value) {
@@ -233,8 +285,25 @@ class RenderPlatSplit extends RenderBox
   final _gutterCenters = <double>[];
   double _availableMain = 0;
 
-  // Drag-only override. Setting triggers markNeedsLayout, no rebuild.
+  // Drag-only overrides. Setting triggers markNeedsLayout, no rebuild.
+  // `_liveCollapsed` is non-null only while dragging a divider next to a
+  // collapsible slot, and always starts as a copy of `_collapsed`.
   Map<String, PlatSize>? _liveSizes;
+  Set<String>? _liveCollapsed;
+
+  // Per-side collapse tracking for the live drag, keyed by node id.
+  final _dragCollapse = <String, CollapseState>{};
+
+  // Committed collapse state, and the in-flight transition toward it.
+  // While `_collapseFrom` holds an id, that id's extent is interpolated
+  // rather than read straight off `_collapsed`.
+  Set<String> _collapsed;
+  final _collapseFrom = <String, double>{};
+  final _collapseTo = <String, double>{};
+  AnimationController? _collapseAnimation;
+  TickerProvider _vsync;
+  Duration _collapseDuration;
+  Curve _collapseCurve;
 
   // `_pending` is set on PointerDown; the recognizer consumes it in
   // onDragStart. `_drag` is non-null while a drag is live.
@@ -242,6 +311,49 @@ class RenderPlatSplit extends RenderBox
   _Drag? _drag;
 
   DragGestureRecognizer? _recognizer;
+
+  set collapsed(Set<String> value) {
+    if (setEquals(_collapsed, value)) return;
+    // Anchor every id whose target moves — including ones already
+    // mid-flight — at the extent it is showing right now, so a change
+    // that lands mid-transition continues from where the eye is.
+    final touched = {..._collapsed, ...value, ..._collapseTo.keys};
+    final from = <String, double>{};
+    for (final id in touched) {
+      from[id] = _extentFactorFor(id);
+    }
+    _collapsed = value;
+    _collapseFrom
+      ..clear()
+      ..addAll(from);
+    _collapseTo
+      ..clear()
+      ..addEntries(
+        touched.map((id) => MapEntry(id, value.contains(id) ? 0.0 : 1.0)),
+      );
+    _collapseFrom.removeWhere((id, value) => value == _collapseTo[id]);
+    _collapseTo.removeWhere((id, _) => !_collapseFrom.containsKey(id));
+    if (_collapseFrom.isEmpty) {
+      _collapseAnimation?.stop();
+      markNeedsLayout();
+      return;
+    }
+    _startCollapseAnimation();
+  }
+
+  set collapseCurve(Curve value) => _collapseCurve = value;
+
+  set collapseDuration(Duration value) {
+    if (_collapseDuration == value) return;
+    _collapseDuration = value;
+    _collapseAnimation?.duration = value;
+  }
+
+  set vsync(TickerProvider value) {
+    if (_vsync == value) return;
+    _vsync = value;
+    _collapseAnimation?.resync(value);
+  }
 
   Axis get axis => _axis;
 
@@ -293,6 +405,46 @@ class RenderPlatSplit extends RenderBox
     super.detach();
   }
 
+  @override
+  void dispose() {
+    _collapseAnimation?.dispose();
+    _collapseAnimation = null;
+    _recognizer?.dispose();
+    _recognizer = null;
+    super.dispose();
+  }
+
+  void _startCollapseAnimation() {
+    final animation = _collapseAnimation ??= AnimationController(
+      vsync: _vsync,
+      duration: _collapseDuration,
+    )..addListener(markNeedsLayout);
+    animation
+      ..duration = _collapseDuration
+      ..forward(from: 0).whenCompleteOrCancel(() {
+        // Settled: `_collapsed` alone describes every extent again.
+        if (animation.isAnimating) return;
+        _collapseFrom.clear();
+        _collapseTo.clear();
+      });
+  }
+
+  /// Fraction of its open extent that [id] currently occupies: `1` when
+  /// open, `0` when collapsed, in between mid-transition.
+  double _extentFactorFor(String id) {
+    final live = _liveCollapsed;
+    // A drag owns the extent outright — no transition competes with the
+    // pointer.
+    if (live != null) return live.contains(id) ? 0.0 : 1.0;
+    final from = _collapseFrom[id];
+    final to = _collapseTo[id];
+    final animation = _collapseAnimation;
+    if (from == null || to == null || animation == null) {
+      return _collapsed.contains(id) ? 0.0 : 1.0;
+    }
+    return from + (to - from) * _collapseCurve.transform(animation.value);
+  }
+
   void _resetRecognizer() {
     _recognizer?.dispose();
     _recognizer =
@@ -328,14 +480,19 @@ class RenderPlatSplit extends RenderBox
       0.0,
       mainExtent,
     );
-    final pixels = _computeSizes(platSizes, _availableMain);
+    // `open` is what each child claims with nothing collapsed; it stays
+    // the restore extent for a collapsed slot. `laid` scales those claims
+    // by the collapse factor and hands the freed pixels to the children
+    // that are still fully open.
+    final open = _computeSizes(platSizes, _availableMain);
+    final laid = _applyCollapse(open);
 
     var offset = 0.0;
     var contentIndex = 0;
     for (var child = firstChild; child != null; child = childAfter(child)) {
       final data = child.parentData! as _SplitParentData;
       final isContent = data.contentId != null;
-      final mainSize = isContent ? pixels[contentIndex] : _spacing;
+      final mainSize = isContent ? laid[contentIndex] : _spacing;
       child.layout(_tightAxis(mainSize, crossExtent));
       data.offset = _mainOffset(offset);
       if (isContent) {
@@ -343,6 +500,7 @@ class RenderPlatSplit extends RenderBox
           id: data.contentId!,
           size: data.platSize!,
           pixels: mainSize,
+          openPixels: open[contentIndex],
         ));
         contentIndex++;
       } else {
@@ -352,6 +510,51 @@ class RenderPlatSplit extends RenderBox
     }
 
     size = constraints.biggest;
+  }
+
+  /// Scales [open] by each content child's collapse factor and
+  /// redistributes the freed pixels across the children that are still
+  /// fully open, proportionally to what they already claim.
+  ///
+  /// Returns [open] untouched when nothing is collapsing, so a split with
+  /// no collapsible slot keeps its existing allocation exactly.
+  List<double> _applyCollapse(List<double> open) {
+    final factors = <double>[];
+    var collapsing = false;
+    var index = 0;
+    for (var child = firstChild; child != null; child = childAfter(child)) {
+      final id = (child.parentData! as _SplitParentData).contentId;
+      if (id == null) continue;
+      final factor = _extentFactorFor(id);
+      if (factor < 1) collapsing = true;
+      factors.add(factor);
+      index++;
+    }
+    if (!collapsing || index != open.length) return open;
+
+    final laid = [for (var i = 0; i < open.length; i++) open[i] * factors[i]];
+    var freed = 0.0;
+    for (var i = 0; i < open.length; i++) {
+      freed += open[i] - laid[i];
+    }
+    if (freed <= 0) return laid;
+
+    final openIndices = [
+      for (var i = 0; i < factors.length; i++)
+        if (factors[i] == 1) i,
+    ];
+    if (openIndices.isEmpty) return laid;
+
+    var claimed = 0.0;
+    for (final i in openIndices) {
+      claimed += laid[i];
+    }
+    for (final i in openIndices) {
+      laid[i] += claimed > 0
+          ? freed * (laid[i] / claimed)
+          : freed / openIndices.length;
+    }
+    return laid;
   }
 
   /// Walk content children and return their [PlatSize]s, with any
@@ -369,7 +572,14 @@ class RenderPlatSplit extends RenderBox
 
   @override
   void paint(PaintingContext context, Offset offset) {
-    defaultPaint(context, offset);
+    for (var child = firstChild; child != null; child = childAfter(child)) {
+      final data = child.parentData! as _SplitParentData;
+      // A fully collapsed child is laid out at zero main extent; its
+      // subtree would otherwise paint outside those bounds.
+      final main = _isHorizontal ? child.size.width : child.size.height;
+      if (main <= 0) continue;
+      context.paintChild(child, offset + data.offset);
+    }
   }
 
   @override
@@ -469,6 +679,16 @@ class RenderPlatSplit extends RenderBox
       right: right,
       available: _availableMain,
     );
+    _dragCollapse.clear();
+    for (final slot in [left, right]) {
+      if (!collapsible.containsKey(slot.id)) continue;
+      _dragCollapse[slot.id] = CollapseBehavior.beginDrag(
+        collapsed: _collapsed.contains(slot.id),
+        currentPixels: slot.pixels,
+        restorePixels: slot.openPixels,
+      );
+    }
+    if (_dragCollapse.isNotEmpty) _liveCollapsed = {..._collapsed};
     interaction.setDragging(pending);
   }
 
@@ -476,7 +696,86 @@ class RenderPlatSplit extends RenderBox
     final drag = _drag;
     if (drag == null) return;
     final delta = _mainOf(details.globalPosition) - _mainOf(drag.startGlobal);
-    final updated = _resizePair(drag, delta);
+    if (_dragCollapse.isNotEmpty) {
+      _updateCollapsibleDrag(drag, delta);
+      return;
+    }
+    _applyPair(drag, _resizePair(drag, drag.left.pixels + delta));
+  }
+
+  /// Runs one drag step through the collapse state machine for whichever
+  /// side of the divider is a live collapse candidate, falling back to a
+  /// plain pair resize when neither is.
+  void _updateCollapsibleDrag(_Drag drag, double delta) {
+    final live = _liveCollapsed!;
+    final target = _collapseTarget(drag, delta, live);
+    if (target == null) {
+      _applyPair(drag, _resizePair(drag, drag.left.pixels + delta));
+      return;
+    }
+
+    final isLeft = target.id == drag.left.id;
+    final bounds = (target.size as FlexibleSize).bounds(drag.available);
+    final outcome = CollapseBehavior.resize(
+      state: _dragCollapse[target.id]!,
+      requestedPixels: isLeft
+          ? drag.left.pixels + delta
+          : drag.right.pixels - delta,
+      min: bounds.min,
+      max: bounds.max,
+      threshold: _thresholdFor(target.id, drag.available, bounds.min),
+      collapsed: live.contains(target.id),
+    );
+    _dragCollapse[target.id] = outcome.state;
+
+    switch (outcome) {
+      case CollapseHold():
+        return;
+      case CollapseClose():
+        live.add(target.id);
+        // Drop the size overrides so the slot commits its declared
+        // extent: that is what a reopen restores to.
+        _liveSizes = null;
+        markNeedsLayout();
+      case CollapseReveal(:final pixels):
+        live.remove(target.id);
+        _applyPair(drag, _resizePair(drag, _wantLeftFor(drag, isLeft, pixels)));
+        markNeedsLayout();
+      case CollapseResize(:final pixels):
+        _applyPair(drag, _resizePair(drag, _wantLeftFor(drag, isLeft, pixels)));
+    }
+  }
+
+  /// The side of [drag] the collapse machine should drive this step.
+  ///
+  /// An already-collapsed side wins, so the reveal gesture stays with the
+  /// slot the user closed. Otherwise the shrinking side is the candidate.
+  _Slot? _collapseTarget(_Drag drag, double delta, Set<String> live) {
+    final leftTracked = _dragCollapse.containsKey(drag.left.id);
+    final rightTracked = _dragCollapse.containsKey(drag.right.id);
+    if (leftTracked && live.contains(drag.left.id)) return drag.left;
+    if (rightTracked && live.contains(drag.right.id)) return drag.right;
+    if (delta < 0 && leftTracked) return drag.left;
+    if (delta > 0 && rightTracked) return drag.right;
+    return null;
+  }
+
+  /// Translates a desired extent for one side into the left side's extent,
+  /// which is what [_resizePair] takes.
+  double _wantLeftFor(_Drag drag, bool isLeft, double pixels) =>
+      isLeft ? pixels : drag.left.pixels + (drag.right.pixels - pixels);
+
+  /// Collapse threshold for [id] in pixels. [PlatExtent.auto] resolves to
+  /// half the slot's minimum, or a flat fallback when it declares none.
+  double _thresholdFor(String id, double available, double min) {
+    final extent = collapsible[id];
+    if (extent == null || extent is AutoExtent) {
+      return min > 0 ? min / 2 : _fallbackCollapseThreshold;
+    }
+    return extent.pixels(available);
+  }
+
+  void _applyPair(_Drag drag, _PairUpdate? updated) {
     if (updated == null) return;
     _liveSizes = {
       drag.left.id: updated.leftSize,
@@ -487,25 +786,46 @@ class RenderPlatSplit extends RenderBox
 
   void _finishDrag() {
     final overrides = _liveSizes;
+    final live = _liveCollapsed;
     _drag = null;
     _pending = null;
     _liveSizes = null;
+    _liveCollapsed = null;
+    _dragCollapse.clear();
     interaction.setDragging(null);
-    if (overrides == null) return;
+
+    final changed = <String, bool>{};
+    if (live != null) {
+      for (final id in {...live, ..._collapsed}) {
+        final collapsed = live.contains(id);
+        if (collapsed != _collapsed.contains(id)) changed[id] = collapsed;
+      }
+      // Adopt the drag's result up front so the rebuild it triggers is a
+      // no-op for `collapsed` and never animates what the pointer already
+      // did.
+      if (changed.isNotEmpty) {
+        _collapsed = live;
+        _collapseFrom.clear();
+        _collapseTo.clear();
+        _collapseAnimation?.stop();
+      }
+    }
+
+    if (overrides == null && changed.isEmpty) return;
     markNeedsLayout();
-    onCommit(_readContentSizes(overrides: overrides));
+    // A slot that just collapsed keeps its declared size as the extent to
+    // restore on reopen, so its override is dropped from the commit.
+    final sizes = {...?overrides}..removeWhere((id, _) => changed[id] ?? false);
+    onCommit(_readContentSizes(overrides: sizes), changed);
   }
 
-  _PairUpdate? _resizePair(_Drag drag, double delta) {
+  _PairUpdate? _resizePair(_Drag drag, double wantLeftRaw) {
     final left = drag.left.size as FlexibleSize;
     final right = drag.right.size as FlexibleSize;
     final leftBounds = left.bounds(drag.available);
     final rightBounds = right.bounds(drag.available);
 
-    final wantLeft = (drag.left.pixels + delta).clamp(
-      leftBounds.min,
-      leftBounds.max,
-    );
+    final wantLeft = wantLeftRaw.clamp(leftBounds.min, leftBounds.max);
     final wantRight = (drag.right.pixels - (wantLeft - drag.left.pixels)).clamp(
       rightBounds.min,
       rightBounds.max,

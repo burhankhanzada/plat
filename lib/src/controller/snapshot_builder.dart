@@ -57,6 +57,9 @@ PlatNode platNodeFromSnapshot(PlatSnapshot s) => switch (s) {
     child: slot.child == null ? null : platNodeFromSnapshot(slot.child!),
     persistent: slot.persistent,
     boundsMaximize: slot.boundsMaximize,
+    collapsible: slot.collapsible,
+    collapseThreshold: slot.collapseThreshold,
+    collapsed: slot.collapsed,
   ),
   final LeafSnapshot leaf => leafNodeFromSnapshot(leaf),
 };
@@ -96,6 +99,9 @@ PlatSnapshot snapshotOf(PlatNode node) => switch (node) {
     child: s.child == null ? null : snapshotOf(s.child!),
     persistent: s.persistent,
     boundsMaximize: s.boundsMaximize,
+    collapsible: s.collapsible,
+    collapseThreshold: s.collapseThreshold,
+    collapsed: s.collapsed,
   ),
   final LeafNode l => _leafSnapshotOf(l),
 };

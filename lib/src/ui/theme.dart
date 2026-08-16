@@ -91,8 +91,15 @@ final class PlatDividerTheme {
   });
 
   @override
-  int get hashCode =>
-      Object.hash(thickness, hitSlop, decoration, color, cursor, margin, borderRadius);
+  int get hashCode => Object.hash(
+    thickness,
+    hitSlop,
+    decoration,
+    color,
+    cursor,
+    margin,
+    borderRadius,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -138,7 +145,11 @@ final class PlatDividerTheme {
       color: _lerpColorStateProperty(a.color, b.color, t),
       cursor: pickB ? b.cursor : a.cursor,
       margin: EdgeInsetsGeometry.lerp(a.margin, b.margin, t),
-      borderRadius: BorderRadiusGeometry.lerp(a.borderRadius, b.borderRadius, t),
+      borderRadius: BorderRadiusGeometry.lerp(
+        a.borderRadius,
+        b.borderRadius,
+        t,
+      ),
     );
   }
 }
@@ -221,6 +232,53 @@ final class PlatDropHintTheme {
       duration: pickB ? b.duration : a.duration,
       transitionBuilder: pickB ? b.transitionBuilder : a.transitionBuilder,
       edgeFraction: lerpDouble(a.edgeFraction, b.edgeFraction, t)!,
+    );
+  }
+}
+
+/// Timing for the collapse/reopen transition of a collapsible slot.
+///
+/// Only programmatic collapses animate. A collapse driven by a divider
+/// drag commits instantly, so the pane never lags behind the pointer.
+@immutable
+final class PlatCollapseTheme {
+  /// Duration of the collapse/reopen transition.
+  final Duration duration;
+
+  /// Curve of the collapse/reopen transition.
+  final Curve curve;
+
+  const PlatCollapseTheme({
+    this.duration = const Duration(milliseconds: 180),
+    this.curve = Curves.easeOutCubic,
+  });
+
+  @override
+  int get hashCode => Object.hash(duration, curve);
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PlatCollapseTheme &&
+          other.duration == duration &&
+          other.curve == curve;
+
+  PlatCollapseTheme copyWith({Duration? duration, Curve? curve}) =>
+      PlatCollapseTheme(
+        duration: duration ?? this.duration,
+        curve: curve ?? this.curve,
+      );
+
+  static PlatCollapseTheme lerp(
+    PlatCollapseTheme a,
+    PlatCollapseTheme b,
+    double t,
+  ) {
+    if (identical(a, b)) return a;
+    final pickB = t >= 0.5;
+    return PlatCollapseTheme(
+      duration: pickB ? b.duration : a.duration,
+      curve: pickB ? b.curve : a.curve,
     );
   }
 }
@@ -591,6 +649,9 @@ final class PlatThemeData extends ThemeExtension<PlatThemeData> {
   /// Drop hint overlay visuals and timing.
   final PlatDropHintTheme dropHint;
 
+  /// Collapse/reopen transition timing for collapsible slots.
+  final PlatCollapseTheme collapse;
+
   /// Background color for the reserved leaf drag-handle strip.
   ///
   /// Defaults to transparent so leaf content controls its own surface. Set this
@@ -601,12 +662,18 @@ final class PlatThemeData extends ThemeExtension<PlatThemeData> {
     this.tabBar = const PlatTabBarTheme(),
     this.divider = const PlatDividerTheme(),
     this.dropHint = const PlatDropHintTheme(),
+    this.collapse = const PlatCollapseTheme(),
     this.leafDragHandleBackgroundColor,
   });
 
   @override
-  int get hashCode =>
-      Object.hash(tabBar, divider, dropHint, leafDragHandleBackgroundColor);
+  int get hashCode => Object.hash(
+    tabBar,
+    divider,
+    dropHint,
+    collapse,
+    leafDragHandleBackgroundColor,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -615,6 +682,7 @@ final class PlatThemeData extends ThemeExtension<PlatThemeData> {
           other.tabBar == tabBar &&
           other.divider == divider &&
           other.dropHint == dropHint &&
+          other.collapse == collapse &&
           other.leafDragHandleBackgroundColor == leafDragHandleBackgroundColor;
 
   @override
@@ -622,11 +690,13 @@ final class PlatThemeData extends ThemeExtension<PlatThemeData> {
     PlatTabBarTheme? tabBar,
     PlatDividerTheme? divider,
     PlatDropHintTheme? dropHint,
+    PlatCollapseTheme? collapse,
     Color? leafDragHandleBackgroundColor,
   }) => PlatThemeData(
     tabBar: tabBar ?? this.tabBar,
     divider: divider ?? this.divider,
     dropHint: dropHint ?? this.dropHint,
+    collapse: collapse ?? this.collapse,
     leafDragHandleBackgroundColor:
         leafDragHandleBackgroundColor ?? this.leafDragHandleBackgroundColor,
   );
@@ -639,6 +709,7 @@ final class PlatThemeData extends ThemeExtension<PlatThemeData> {
       tabBar: .lerp(tabBar, other.tabBar, t),
       divider: .lerp(divider, other.divider, t),
       dropHint: .lerp(dropHint, other.dropHint, t),
+      collapse: .lerp(collapse, other.collapse, t),
       leafDragHandleBackgroundColor: Color.lerp(
         leafDragHandleBackgroundColor,
         other.leafDragHandleBackgroundColor,

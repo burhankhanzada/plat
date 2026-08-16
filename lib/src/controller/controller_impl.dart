@@ -366,6 +366,11 @@ final class PlatControllerImpl extends PlatController {
   }
 
   @override
+  bool setCollapsed(String slotId, {required bool collapsed}) {
+    return _commit(_root.setCollapsed(slotId, collapsed: collapsed));
+  }
+
+  @override
   bool setHidden(String id, {required bool hidden}) {
     return _commit(_root.setHidden(id, hidden: hidden));
   }

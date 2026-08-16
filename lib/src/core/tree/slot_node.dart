@@ -3,10 +3,10 @@ part of 'tree.dart';
 /// A structural wrapper around a single, optional [child].
 ///
 /// Slots anchor stable ids in regions that may be empty, scope a
-/// maximize to its subtree ([boundsMaximize]), and let chrome paint
-/// around the child. A bare slot with no flags is decorative and
-/// disappears when its child does; a [persistent] slot stays put as
-/// an empty stub.
+/// maximize to its subtree ([boundsMaximize]), collapse to zero extent
+/// ([collapsible]), and let chrome paint around the child. A bare slot
+/// with no flags is decorative and disappears when its child does; a
+/// [persistent] slot stays put as an empty stub.
 @internal
 final class SlotNode extends PlatNode {
   /// The wrapped node, or `null` when the slot is empty.
@@ -21,11 +21,33 @@ final class SlotNode extends PlatNode {
   /// the slot's bounds rather than the whole tree.
   final bool boundsMaximize;
 
+  /// When true, dragging the neighbouring divider past
+  /// [collapseThreshold] collapses the slot, and dragging back past it
+  /// reopens the slot.
+  final bool collapsible;
+
+  /// Extent at which a drag collapses this slot, and the reverse
+  /// distance at which a collapsed slot reopens.
+  ///
+  /// [PlatExtent.auto] resolves to half the slot's minimum extent, or
+  /// 20 logical pixels when the slot declares no minimum.
+  final PlatExtent collapseThreshold;
+
+  /// When true, the slot is laid out at zero main-axis extent while
+  /// keeping its divider draggable so it can be reopened.
+  ///
+  /// Unlike [PlatNode.hidden], a collapsed slot stays in the layout: it
+  /// keeps its [PlatNode.size] as the extent to restore on reopen.
+  final bool collapsed;
+
   SlotNode({
     required super.id,
     this.child,
     this.persistent = false,
     this.boundsMaximize = false,
+    this.collapsible = false,
+    this.collapseThreshold = const .auto(),
+    this.collapsed = false,
     super.size,
     super.hidden,
     super.maximized,
@@ -48,6 +70,9 @@ final class SlotNode extends PlatNode {
     bool clearChild = false,
     bool? persistent,
     bool? boundsMaximize,
+    bool? collapsible,
+    PlatExtent? collapseThreshold,
+    bool? collapsed,
     PlatSize? size,
     bool? hidden,
     bool? maximized,
@@ -56,6 +81,9 @@ final class SlotNode extends PlatNode {
     child: clearChild ? null : (child ?? this.child),
     persistent: persistent ?? this.persistent,
     boundsMaximize: boundsMaximize ?? this.boundsMaximize,
+    collapsible: collapsible ?? this.collapsible,
+    collapseThreshold: collapseThreshold ?? this.collapseThreshold,
+    collapsed: collapsed ?? this.collapsed,
     size: size ?? this.size,
     hidden: hidden ?? this.hidden,
     maximized: maximized ?? this.maximized,
@@ -87,6 +115,8 @@ final class SlotNode extends PlatNode {
     final flags = [
       if (persistent) 'persistent',
       if (boundsMaximize) 'boundsMaximize',
+      if (collapsible) 'collapsible',
+      if (collapsed) 'collapsed',
     ].join(', ');
     final body = child == null ? 'empty' : '$child';
     return flags.isEmpty
